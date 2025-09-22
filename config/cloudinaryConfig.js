@@ -1,23 +1,10 @@
-const cloudinary = require('cloudinary');
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const { v2: cloudinary } = require("cloudinary");
 
 cloudinary.config({
-    cloud_name: process.env.CLOUD_NAME,
-    api_key: process.env.API_KEY,
-    api_secret: process.env.SECRET_KEY
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.API_KEY,
+  api_secret: process.env.SECRET_KEY
 });
 
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-        folder: 'BansalElectronicsShop',
-        allowedFormats: ["png", "jpg", "jpeg"],
-        public_id: (req, file) => {
-            // Generate a unique public_id using a timestamp or UUID
-            const uniqueId = `${Date.now()}-${file.originalname.split('.')[0]}`;
-            return uniqueId;
-          }
-    },
-});
+module.exports = { cloudinary };
 
-module.exports = {cloudinary,storage};

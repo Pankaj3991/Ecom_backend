@@ -14,34 +14,33 @@ const {
 exports.createProduct = catchAsyncErrors(async (req, res, next) => {
   const { token } = req.cookies;
   const { id } = jwt.decode(token);
-
   req.body.user = id;
-  const files = req.files;
-  const imageUrls = files.map((file) => ({
-    public_id: file.filename,
-    url: file.path,
-  }));
-  let category = await Category.find({ name: req.body.category });
 
-  if (category.length == 0) {
-    category = await Category.find();
-    const categories = category.map((ct) => ct.name);
+  // Validate images from middleware
+  if (!req.body.images || req.body.images.length === 0) {
+    return next(new ErrorHandler("Please upload at least 1 image", 400));
+  }
+
+  let category = await Category.find({ name: req.body.category });
+  if (category.length === 0) {
+    const categories = (await Category.find()).map((c) => c.name);
     return next(
       new ErrorHandler(
-        `${req.body.category} does not exist, please choose from -- ${categories}`
+        `${req.body.category} does not exist, choose from ${categories}`,
+        400
       )
     );
   }
-  req.body.images = imageUrls;
-  // joi validation for form-data..
-  const { error } = createProductValidation.validate(req.body);
-  if (error) {
-    return next(new ErrorHandler(error.details[0].message, 400));
-  }
+
   req.body.category = category[0]._id;
+
+  const { error } = createProductValidation.validate(req.body);
+  if (error) return next(new ErrorHandler(error.details[0].message, 400));
+
   const product = await Product.create(req.body);
   category[0].products.push(product._id);
   await category[0].save();
+
   res.status(201).json({
     success: true,
     message: "Product successfully created",
@@ -60,18 +59,20 @@ exports.updateProduct = catchAsyncErrors(async (req, res, next) => {
   }
   const user = await User.findById(id);
   const product = await Product.findById(req.params.id).populate("category");
-  if (user.role != "admin" && product.user.toString() != id.toString()) {
+  if (user.role !== "admin" && product.user.toString() !== id.toString()) {
     return next(
       new ErrorHandler("Only owner or admin can update this product", 401)
     );
   }
-  // new images to push into images[] in database..
-  if (req.files && req.files.length > 0) {
-    // req.files.map(file => product.images.push({ public_id: file.filename, url: file.path }));
-    req.files.map((file) =>
-      product.images.push({ public_id: file.filename, url: file.path })
-    );
-    product.save();
+  // ✅ Add new images (we sent them from router as req.body.newImages)
+  if (req.body.newImages && req.body.newImages.length > 0) {
+    req.body.newImages.forEach((img) => {
+      product.images.push({
+        public_id: img.public_id,
+        url: img.url,
+      });
+    });
+    await product.save();
   }
   // manage category --
   if (req.body.category) {
@@ -102,21 +103,26 @@ exports.updateProduct = catchAsyncErrors(async (req, res, next) => {
     );
     req.body.category = category[0]._id;
   }
-  // Remove images from database & cloudinary
   const { RemoveImages } = req.body;
-  if (RemoveImages) {
-    product.images = product.images.filter(
-      (image) => !RemoveImages.includes(image.public_id)
-    );
-    for (let index = 0; index < RemoveImages.length; index++) {
-      await cloudinary.uploader.destroy(
-        RemoveImages[index],
-        (error, result) => {
-          console.log(error, result);
-        }
-      );
+
+  if (RemoveImages && RemoveImages.length > 0) {
+    // Destroy on Cloudinary first
+    for (const idToRemove of RemoveImages) {
+      try {
+        // Make sure you pass full public_id
+        const result = await cloudinary.uploader.destroy(idToRemove);
+        console.log(`Deleted from Cloudinary: ${idToRemove}`, result);
+      } catch (err) {
+        console.error(`Failed to delete from Cloudinary: ${idToRemove}`, err);
+      }
     }
-    product.save();
+
+    // Now filter the DB array
+    product.images = product.images.filter(
+      (img) => !RemoveImages.includes(img.public_id)
+    );
+
+    await product.save();
   }
 
   const updatedProduct = await Product.findByIdAndUpdate(
@@ -201,10 +207,9 @@ exports.listProduct = catchAsyncErrors(async (req, res, next) => {
     limit = 10,
   } = req.query;
 
-
   const { token } = req.cookies;
   let user;
-  if(token){
+  if (token) {
     const { id } = jwt.decode(token);
 
     user = await User.findById(id);
@@ -226,7 +231,7 @@ exports.listProduct = catchAsyncErrors(async (req, res, next) => {
     filter.category = category;
   }
 
-  if(supplier==='true'){
+  if (supplier === "true") {
     filter.user = user._id;
   }
   // Filter by price range
@@ -261,14 +266,14 @@ exports.listProduct = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-exports.supplierProducts = catchAsyncErrors(async (req,res,next)=>{
+exports.supplierProducts = catchAsyncErrors(async (req, res, next) => {
   const { token } = req.cookies;
   const { id } = jwt.decode(token);
 
   const user = await User.findById(id);
-  const products = await Product.find({user:user._id});
+  const products = await Product.find({ user: user._id });
   res.status(200).json({
-    success:true,
-    products
-  })
+    success: true,
+    products,
+  });
 });

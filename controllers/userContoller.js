@@ -17,12 +17,11 @@ const {
 
 // Register a User
 exports.registerUser = catchAsyncErrors(async (req, res, next) => {
-  const { error } = registerValidation.validate(req.body);
-  if (error) {
-    return next(new ErrorHandler(error.details[0].message, 400));
-  }
-
-  const { name, email, password, role = "user" } = req.body;
+  const { name, email, password,avatar,role = "user" } = req.body;
+  // const { error } = registerValidation.validate(req.body);
+  // if (error) {
+  //   return next(new ErrorHandler(error.details[0].message, 400));
+  // }
 
   if (role == "admin") {
     return next(
@@ -32,6 +31,7 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
       )
     );
   }
+  console.log(req.file.filename);
 
   const uniqueUser = await User.find({ email });
   if (uniqueUser.length > 0) {
@@ -39,19 +39,15 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
       new ErrorHandler("E-mail already registered, please login", 400)
     );
   }
-
   const user = await User.create({
     name,
     email,
     password,
-    avatar: {
-      public_id: req.file.filename,
-      url: req.file.path,
-    },
+    avatar,
     role,
   });
   // creating cart of the user..
-  await Cart.create({user:user._id});
+  await Cart.create({ user: user._id });
   sendToken(user, 201, res);
 });
 
@@ -99,7 +95,7 @@ exports.logout = catchAsyncErrors(async (req, res, next) => {
 
 // Get User Detail
 exports.getUserDetails = catchAsyncErrors(async (req, res, next) => {
-  const {token} = req.cookies;
+  const { token } = req.cookies;
   const currUser = jwt.decode(token);
   const user = await User.findById(currUser.id);
 
@@ -111,16 +107,16 @@ exports.getUserDetails = catchAsyncErrors(async (req, res, next) => {
 
 // update User password
 exports.updatePassword = catchAsyncErrors(async (req, res, next) => {
-  const {token} = req.cookies;
-  const {id} = jwt.decode(token);
+  const { token } = req.cookies;
+  const { id } = jwt.decode(token);
   const user = await User.findById(id).select("+password");
-  
+
   const { error } = updatePwdValidation.validate(req.body);
   if (error) {
     return next(new ErrorHandler(error.details[0].message, 400));
   }
-  
-  const {oldPassword, newPassword} = req.body;
+
+  const { oldPassword, newPassword } = req.body;
 
   const isPasswordMatched = await bcrypt.compare(oldPassword, user.password);
 
@@ -136,30 +132,32 @@ exports.updatePassword = catchAsyncErrors(async (req, res, next) => {
 
 // update User Profile
 exports.updateProfile = catchAsyncErrors(async (req, res, next) => {
-  const {token} = req.cookies;
-  const {id} = jwt.decode(token);
+  const { token } = req.cookies;
+  const { id } = jwt.decode(token);
 
   let user = await User.findById(id);
 
   if (!user) {
     return next(new ErrorHandler("User not found", 404));
   }
-
+  const {avatar} = req.body;
+  console.log(avatar);
   const { error } = updateProfileValidation.validate(req.body);
   if (error) {
+    console.log(error);
     return next(new ErrorHandler(error.details[0].message, 400));
   }
-  
-  let imageUrl = user.avatar;
-  if(req.file){
-    await cloudinary.uploader.destroy(user.avatar.public_id, (error, result) => {
-      console.log(error, result);
-    });
 
-    imageUrl = {
-      public_id: req.file.filename,
-      url: req.file.path,
-    };
+  let imageUrl = user.avatar;
+  if (req.file) {
+    await cloudinary.uploader.destroy(
+      user.avatar.public_id,
+      (error, result) => {
+        console.log(error, result);
+      }
+    );
+
+    imageUrl = avatar;
   }
   req.body.avatar = imageUrl;
   user = await User.findByIdAndUpdate(id, req.body, {
@@ -215,13 +213,13 @@ exports.updateUserRole = catchAsyncErrors(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    message: "Role successfully updated"
+    message: "Role successfully updated",
   });
 });
 
 // Delete User --Admin
 exports.deleteUser = catchAsyncErrors(async (req, res, next) => {
-  // Also delete other information related to user like -- products created, reviews, cart, etc. 
+  // Also delete other information related to user like -- products created, reviews, cart, etc.
   const user = await User.findById(req.params.id);
 
   if (!user) {
@@ -236,7 +234,7 @@ exports.deleteUser = catchAsyncErrors(async (req, res, next) => {
 
   await User.findByIdAndDelete(req.params.id);
 
-  // Delete other data related to user -- later... 
+  // Delete other data related to user -- later...
   res.status(200).json({
     success: true,
     message: "User Deleted Successfully",
