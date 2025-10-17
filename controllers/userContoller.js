@@ -85,6 +85,8 @@ exports.logout = catchAsyncErrors(async (req, res, next) => {
   res.cookie("token", null, {
     expires: new Date(Date.now()),
     httpOnly: true,
+    sameSite: "None",  // Required if frontend is on different origin
+    secure: true,      // Required for HTTPS
   });
 
   res.status(200).json({
