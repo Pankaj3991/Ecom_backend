@@ -12,10 +12,8 @@ const sendToken = (user, statusCode, res) => {
       Date.now() + process.env.COOKIE_EXPIRE * 24 * 60 * 60 * 1000
     ),
     httpOnly: true,
-    // secure: process.env.NODE_ENV === "production", // ⬅ only true in prod (Render gives HTTPS)
-    secure: true,
-    // sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-    sameSite:"Lax",
+    secure: process.env.NODE_ENV === "production", // ⬅ only true in prod (Render gives HTTPS)
+    sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
   };
 
   res
